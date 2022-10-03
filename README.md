@@ -51,7 +51,7 @@ func main() {
 
 #### Encoding
 
-Read from an `io.Reader` in to an `int64` or `uint64`:
+Read convert an `int64` or `uint64` to a `[]byte`:
 
 ```go
 package main
