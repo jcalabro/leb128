@@ -2,7 +2,7 @@
 //
 // It deals only with 8 byte primitives; attempting to decode integers larger than that will cause an ErrOverflow.
 //
-// This package operates on a basic io.Reader rather than an io.ByteReader as the standard library does (i.e. the various varint functions in https://pkg.go.dev/encoding/binary).
+// This package operates on a basic io.Reader rather than an io.ByteReader as the standard library does (i.e. the various Varint functions in https://pkg.go.dev/encoding/binary).
 //
 // See https://en.wikipedia.org/wiki/LEB128 for more details.
 package leb128
