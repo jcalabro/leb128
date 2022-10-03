@@ -76,8 +76,16 @@ func TestUnsigned(t *testing.T) {
 	}
 
 	{
-		// restrict to 10 bytes (final 3 bytes overflow an 8 byte integer)
-		input := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff}
+		// ensure that we stop at the correct time
+		input := []byte{0x78, 0x10, 0xf, 0xa, 0xb, 0x90, 0x01, 0, 0xff, 0xff, 0xff}
+		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
+		require.NoError(t, err)
+		require.Equal(t, uint64(120), res)
+	}
+
+	{
+		// restrict to 10 bytes (final bytes would overflow an 8 byte integer)
+		input := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0}
 
 		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
 		require.ErrorIs(t, err, leb128.ErrOverflow)
@@ -197,8 +205,8 @@ func TestEncodeS64(t *testing.T) {
 	}
 
 	{
-		// restrict to 10 bytes (final byte overflow an 8 byte integer)
-		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xff, 0xff}
+		// restrict to 10 bytes (final bytes overflow an 8 byte integer)
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xff}
 
 		res, err := leb128.DecodeS64(bytes.NewBuffer(input))
 		require.ErrorIs(t, err, leb128.ErrOverflow)

@@ -44,6 +44,12 @@ func DecodeU64(r io.Reader) (uint64, error) {
 		b := buf[0]
 
 		res |= uint64(b&0x7f) << (7 * bit)
+
+		signBit := b & 0x80
+		if signBit == 0 {
+			break
+		}
+
 		bit++
 	}
 
