@@ -1,21 +1,41 @@
-// @TODO: package doc comment
-// https://en.wikipedia.org/wiki/LEB128#C-like_pseudocode
+// Package leb128 provides functionality to encode/decode signed and unsigned
+// LEB128 data to and from 8 byte primitives. It deals only with 8 byte primitives,
+// attempting to decode integers larger than that will cause an ErrOverflow.
+//
+// This package operates on a basic io.Reader rather than an io.ByteReader as
+// the standard library does (i.e. the various varint functions in
+// https://pkg.go.dev/encoding/binary).
+//
+// See https://en.wikipedia.org/wiki/LEB128 for more details.
 package leb128
 
 import (
+	"errors"
 	"io"
 )
 
+const (
+	// maxWidth indicates the maximum number of bytes that can be used
+	// to encode an 8 byte integer in LEB128
+	maxWidth = 10
+)
+
+var (
+	ErrOverflow = errors.New("LEB128 integer overflow (was more than 8 bytes)")
+)
+
 // DecodeU64 converts a uleb128 byte stream to a uint64. Be careful
-// to ensure that your stream does not overflow - this function is only
-// approproat ewhen you know the number in question can be contained
-// in a uint64.
+// to ensure that your data can fit in 8 bytes.
 func DecodeU64(r io.Reader) (uint64, error) {
 	var res uint64
 
 	bit := int8(0)
 	buf := make([]byte, 1)
-	for {
+	for i := 0; ; i++ {
+		if i > maxWidth {
+			return 0, ErrOverflow
+		}
+
 		_, err := r.Read(buf)
 		if err == io.EOF {
 			break
@@ -32,16 +52,18 @@ func DecodeU64(r io.Reader) (uint64, error) {
 	return res, nil
 }
 
-// DecodeI64 converts a sleb128 byte stream to a int64. Be careful
-// to ensure that your stream does not overflow - this function is only
-// approproate when you know the number in question can be contained
-// in an int64.
+// DecodeS64 converts a sleb128 byte stream to a int64. Be careful
+// to ensure that your data can fit in 8 bytes.
 func DecodeS64(r io.Reader) (int64, error) {
 	var res int64
 
 	shift := 0
 	buf := make([]byte, 1)
-	for {
+	for i := 0; ; i++ {
+		if i > maxWidth {
+			return 0, ErrOverflow
+		}
+
 		_, err := r.Read(buf)
 		if err == io.EOF {
 			break

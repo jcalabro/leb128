@@ -25,7 +25,7 @@ func TestUnsigned(t *testing.T) {
 		if ndx >= 384 { // [384,512)
 			// i.e. 384 => [128,3]
 			require.Len(t, buf, 2)
-			require.Equal(t, byte(ndx-256), buf[0])
+			require.Equal(t, byte(ndx), buf[0])
 			require.Equal(t, byte(3), buf[1])
 		} else if ndx >= 256 { // [256,384)
 			// i.e. 256 => [128,2]
@@ -73,6 +73,15 @@ func TestUnsigned(t *testing.T) {
 		res, err := leb128.DecodeU64(&errorReader{})
 		require.Error(t, err)
 		require.Zero(t, res)
+	}
+
+	{
+		// restrict to 10 bytes (final 3 bytes overflow an 8 byte integer)
+		input := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0xff, 0xff, 0xff}
+
+		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
+		require.ErrorIs(t, err, leb128.ErrOverflow)
+		require.Equal(t, uint64(0), res)
 	}
 }
 
@@ -127,11 +136,12 @@ func TestEncodeS64(t *testing.T) {
 			require.Equal(t, byte(ndx), buf[0])
 			require.Equal(t, byte(125), buf[1])
 		} else if ndx < -128 { // [-256,-128)
-			// i.e. -256 => [129,125]
+			// i.e. -256 => [128,126]
 			require.Len(t, buf, 2)
 			require.Equal(t, byte(ndx+128), buf[0])
 			require.Equal(t, byte(126), buf[1])
 		} else if ndx < -64 { // [-128,-64)
+			// i.e. -128 => [128,127]
 			require.Len(t, buf, 2)
 			require.Equal(t, byte(ndx), buf[0])
 			require.Equal(t, byte(127), buf[1])
@@ -184,5 +194,14 @@ func TestEncodeS64(t *testing.T) {
 		res, err := leb128.DecodeS64(&errorReader{})
 		require.Error(t, err)
 		require.Zero(t, res)
+	}
+
+	{
+		// restrict to 10 bytes (final byte overflow an 8 byte integer)
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xff, 0xff}
+
+		res, err := leb128.DecodeS64(bytes.NewBuffer(input))
+		require.ErrorIs(t, err, leb128.ErrOverflow)
+		require.Equal(t, int64(0), res)
 	}
 }
