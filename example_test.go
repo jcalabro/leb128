@@ -14,7 +14,6 @@ func ExampleDecodeU64() {
 		panic(err)
 	}
 	fmt.Println(num)
-
 	// Output:
 	// 256
 }
@@ -22,7 +21,6 @@ func ExampleDecodeU64() {
 func ExampleEncodeU64() {
 	buf := leb128.EncodeU64(256)
 	fmt.Println(buf)
-
 	// Output:
 	// [128 2]
 }
@@ -34,7 +32,6 @@ func ExampleDecodeS64() {
 		panic(err)
 	}
 	fmt.Println(num)
-
 	// Output:
 	// -256
 }
@@ -42,7 +39,6 @@ func ExampleDecodeS64() {
 func ExampleEncodeS64() {
 	buf := leb128.EncodeS64(-256)
 	fmt.Println(buf)
-
 	// Output:
 	// [128 126]
 }
