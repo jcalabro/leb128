@@ -93,7 +93,7 @@ func TestUnsigned(t *testing.T) {
 	}
 }
 
-func TestEncodeS64(t *testing.T) {
+func TestSigned(t *testing.T) {
 	// simple low-range positive cases
 	for ndx := int64(0); ndx < 512; ndx++ {
 		buf := leb128.EncodeS64(ndx)
