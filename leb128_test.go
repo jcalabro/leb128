@@ -3,6 +3,7 @@ package leb128_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"testing"
 
@@ -59,6 +60,13 @@ func TestUnsigned32(t *testing.T) {
 		res, err := leb128.DecodeU32(bytes.NewBuffer(buf))
 		require.NoError(t, err)
 		require.Equal(t, uint32(math.MaxUint32), res)
+	}
+
+	{
+		// empty buffer
+		res, err := leb128.DecodeU32(bytes.NewBuffer([]byte{}))
+		require.ErrorIs(t, err, io.EOF)
+		require.Zero(t, res)
 	}
 
 	{
@@ -137,6 +145,13 @@ func TestUnsigned64(t *testing.T) {
 		res, err := leb128.DecodeU64(bytes.NewBuffer(buf))
 		require.NoError(t, err)
 		require.Equal(t, uint64(math.MaxUint64), res)
+	}
+
+	{
+		// empty buffer
+		res, err := leb128.DecodeU64(bytes.NewBuffer([]byte{}))
+		require.ErrorIs(t, err, io.EOF)
+		require.Zero(t, res)
 	}
 
 	{
@@ -268,6 +283,13 @@ func TestSigned64(t *testing.T) {
 		res, err := leb128.DecodeS64(bytes.NewBuffer(buf))
 		require.NoError(t, err)
 		require.Equal(t, int64(math.MinInt64), res)
+	}
+
+	{
+		// empty buffer
+		res, err := leb128.DecodeS64(bytes.NewBuffer([]byte{}))
+		require.ErrorIs(t, err, io.EOF)
+		require.Zero(t, res)
 	}
 
 	{
