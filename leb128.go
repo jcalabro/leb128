@@ -26,7 +26,7 @@ func DecodeU32(r io.Reader) (uint32, error) {
 	buf := make([]byte, 1)
 
 	for i := 0; ; i++ {
-		_, err := r.Read(buf)
+		_, err := io.ReadFull(r, buf)
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -64,7 +64,7 @@ func DecodeU64(r io.Reader) (uint64, error) {
 	buf := make([]byte, 1)
 
 	for i := 0; ; i++ {
-		_, err := r.Read(buf)
+		_, err := io.ReadFull(r, buf)
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -103,7 +103,7 @@ func DecodeS64(r io.Reader) (int64, error) {
 	buf := make([]byte, 1)
 
 	for i := 0; ; i++ {
-		_, err := r.Read(buf)
+		_, err := io.ReadFull(r, buf)
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
