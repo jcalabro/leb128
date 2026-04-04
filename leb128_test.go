@@ -7,7 +7,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/jcalabro/leb128"
+	"github.com/MichaelMure/leb128"
 
 	"github.com/stretchr/testify/require"
 )

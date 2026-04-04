@@ -1,4 +1,4 @@
-module github.com/jcalabro/leb128
+module github.com/MichaelMure/leb128
 
 go 1.19
 
