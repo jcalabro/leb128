@@ -139,6 +139,50 @@ func DecodeS64(r io.Reader) (int64, error) {
 	}
 }
 
+// AppendU32 appends the uleb128 encoding of num to buf and returns the result.
+func AppendU32(buf []byte, num uint32) []byte {
+	for {
+		b := byte(num & 0x7F)
+		num >>= 7
+		if num != 0 {
+			b |= 0x80
+		}
+		buf = append(buf, b)
+		if num == 0 {
+			return buf
+		}
+	}
+}
+
+// AppendU64 appends the uleb128 encoding of num to buf and returns the result.
+func AppendU64(buf []byte, num uint64) []byte {
+	for {
+		b := byte(num & 0x7F)
+		num >>= 7
+		if num != 0 {
+			b |= 0x80
+		}
+		buf = append(buf, b)
+		if num == 0 {
+			return buf
+		}
+	}
+}
+
+// AppendS64 appends the sleb128 encoding of num to buf and returns the result.
+func AppendS64(buf []byte, num int64) []byte {
+	for {
+		b := byte(num & 0x7F)
+		num >>= 7
+		signBit := b & 0x40
+		if (num == 0 && signBit == 0) || (num == -1 && signBit != 0) {
+			buf = append(buf, b)
+			return buf
+		}
+		buf = append(buf, b|0x80)
+	}
+}
+
 // EncodeU32 converts num to a uleb128 encoded array of bytes
 func EncodeU32(num uint32) []byte {
 	buf := make([]byte, 0, 4)
