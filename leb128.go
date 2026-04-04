@@ -23,10 +23,10 @@ func DecodeU32(r io.Reader) (uint32, error) {
 	var res uint32 = 0
 	var shift uint = 0
 
-	buf := make([]byte, 1)
+	var buf [1]byte
 
 	for i := 0; ; i++ {
-		_, err := io.ReadFull(r, buf)
+		_, err := io.ReadFull(r, buf[:])
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -61,10 +61,10 @@ func DecodeU64(r io.Reader) (uint64, error) {
 	var res uint64 = 0
 	var shift uint = 0
 
-	buf := make([]byte, 1)
+	var buf [1]byte
 
 	for i := 0; ; i++ {
-		_, err := io.ReadFull(r, buf)
+		_, err := io.ReadFull(r, buf[:])
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -100,10 +100,10 @@ func DecodeS64(r io.Reader) (int64, error) {
 	var shift uint = 0
 	var prev byte = 0
 
-	buf := make([]byte, 1)
+	var buf [1]byte
 
 	for i := 0; ; i++ {
-		_, err := io.ReadFull(r, buf)
+		_, err := io.ReadFull(r, buf[:])
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
