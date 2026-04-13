@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/jcalabro/leb128"
+	"github.com/MichaelMure/leb128"
 )
 
 func ExampleDecodeU64() {

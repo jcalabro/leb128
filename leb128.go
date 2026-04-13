@@ -12,89 +12,192 @@ import (
 	"io"
 )
 
-const (
-	// maxWidth indicates the maximum number of bytes that can be used
-	// to encode an 8 byte integer in LEB128
-	maxWidth = 10
-)
-
 var (
-	ErrOverflow = errors.New("LEB128 integer overflow (was more than 8 bytes)")
+	ErrOverflow   = errors.New("LEB128 integer overflow")
+	ErrNonMinimal = errors.New("LEB128 integer encoding was not minimal")
 )
 
-// DecodeU64 converts a uleb128 byte stream to a uint64. Be careful
-// to ensure that your data can fit in 8 bytes.
-func DecodeU64(r io.Reader) (uint64, error) {
-	var res uint64
+// DecodeU32 converts a uleb128 byte stream to a uint32. Be careful
+// to ensure that your data can fit in 4 bytes.
+func DecodeU32(r io.ByteReader) (uint32, error) {
+	var res uint32 = 0
+	var shift uint = 0
 
-	bit := int8(0)
-	buf := make([]byte, 1)
 	for i := 0; ; i++ {
-		if i > maxWidth {
-			return 0, ErrOverflow
-		}
-
-		_, err := r.Read(buf)
+		b, err := r.ReadByte()
 		if err == io.EOF {
-			break
+			if i == 0 {
+				return 0, io.EOF
+			} else {
+				return 0, ErrNonMinimal
+			}
 		}
 		if err != nil {
 			return 0, err
 		}
-		b := buf[0]
 
-		res |= uint64(b&0x7f) << (7 * bit)
+		res |= uint32(b&0x7F) << shift
+		shift += 7
 
-		signBit := b & 0x80
-		if signBit == 0 {
-			break
+		if (b & 0x80) == 0 {
+			if shift > 32 && b > 0b1111 {
+				return 0, ErrOverflow
+			} else if shift > 7 && b == 0 {
+				return 0, ErrNonMinimal
+			}
+			return res, nil
+		} else if shift > 32 {
+			return 0, ErrOverflow
+		}
+	}
+}
+
+// DecodeU64 converts a uleb128 byte stream to a uint64. Be careful
+// to ensure that your data can fit in 8 bytes.
+func DecodeU64(r io.ByteReader) (uint64, error) {
+	var res uint64 = 0
+	var shift uint = 0
+
+	for i := 0; ; i++ {
+		b, err := r.ReadByte()
+		if err == io.EOF {
+			if i == 0 {
+				return 0, io.EOF
+			} else {
+				return 0, ErrNonMinimal
+			}
+		}
+		if err != nil {
+			return 0, err
 		}
 
-		bit++
-	}
+		res |= uint64(b&0x7F) << shift
+		shift += 7
 
-	return res, nil
+		if (b & 0x80) == 0 {
+			if shift > 64 && b > 1 {
+				return 0, ErrOverflow
+			} else if shift > 7 && b == 0 {
+				return 0, ErrNonMinimal
+			}
+			return res, nil
+		} else if shift > 64 {
+			return 0, ErrOverflow
+		}
+	}
 }
 
 // DecodeS64 converts a sleb128 byte stream to a int64. Be careful
 // to ensure that your data can fit in 8 bytes.
-func DecodeS64(r io.Reader) (int64, error) {
-	var res int64
+func DecodeS64(r io.ByteReader) (int64, error) {
+	var res int64 = 0
+	var shift uint = 0
+	var prev byte = 0
 
-	shift := 0
-	buf := make([]byte, 1)
 	for i := 0; ; i++ {
-		if i > maxWidth {
-			return 0, ErrOverflow
-		}
-
-		_, err := r.Read(buf)
+		b, err := r.ReadByte()
 		if err == io.EOF {
-			break
+			if i == 0 {
+				return 0, io.EOF
+			} else {
+				return 0, ErrNonMinimal
+			}
 		}
 		if err != nil {
 			return 0, err
 		}
-		b := buf[0]
 
-		res |= int64(b&0x7f) << shift
+		res |= int64(b&0x7F) << shift
 		shift += 7
 
-		if b&0x80 == 0 {
-			if b&0x40 != 0 {
-				// signed
-				res |= ^0 << shift
+		if (b & 0x80) == 0 {
+			if shift > 64 && b != 0 && b != 0x7f {
+				// the 10th byte (if present) must contain only the sign-extended sign bit
+				return 0, ErrOverflow
+			} else if shift > 7 &&
+				((b == 0 && prev&0x40 == 0) || (b == 0x7f && prev&0x40 > 0)) {
+				// overlong if the sign bit of penultimate byte has been extended
+				return 0, ErrNonMinimal
+			} else if shift < 64 && b&0x40 > 0 {
+				// sign extend negative numbers
+				res |= -1 << shift
 			}
-			break
+			return res, nil
+		} else if shift > 64 {
+			return 0, ErrOverflow
+		}
+		prev = b
+	}
+}
+
+// AppendU32 appends the uleb128 encoding of num to buf and returns the result.
+func AppendU32(buf []byte, num uint32) []byte {
+	for {
+		b := byte(num & 0x7F)
+		num >>= 7
+		if num != 0 {
+			b |= 0x80
+		}
+		buf = append(buf, b)
+		if num == 0 {
+			return buf
 		}
 	}
+}
 
-	return res, nil
+// AppendU64 appends the uleb128 encoding of num to buf and returns the result.
+func AppendU64(buf []byte, num uint64) []byte {
+	for {
+		b := byte(num & 0x7F)
+		num >>= 7
+		if num != 0 {
+			b |= 0x80
+		}
+		buf = append(buf, b)
+		if num == 0 {
+			return buf
+		}
+	}
+}
+
+// AppendS64 appends the sleb128 encoding of num to buf and returns the result.
+func AppendS64(buf []byte, num int64) []byte {
+	for {
+		b := byte(num & 0x7F)
+		num >>= 7
+		signBit := b & 0x40
+		if (num == 0 && signBit == 0) || (num == -1 && signBit != 0) {
+			buf = append(buf, b)
+			return buf
+		}
+		buf = append(buf, b|0x80)
+	}
+}
+
+// EncodeU32 converts num to a uleb128 encoded array of bytes
+func EncodeU32(num uint32) []byte {
+	buf := make([]byte, 0, 4)
+
+	done := false
+	for !done {
+		b := byte(num & 0x7F)
+
+		num = num >> 7
+		if num == 0 {
+			done = true
+		} else {
+			b |= 0x80
+		}
+
+		buf = append(buf, b)
+	}
+
+	return buf
 }
 
 // EncodeU64 converts num to a uleb128 encoded array of bytes
 func EncodeU64(num uint64) []byte {
-	buf := make([]byte, 0)
+	buf := make([]byte, 0, 8)
 
 	done := false
 	for !done {
@@ -115,7 +218,7 @@ func EncodeU64(num uint64) []byte {
 
 // EncodeS64 converts num to a sleb128 encoded array of bytes
 func EncodeS64(num int64) []byte {
-	buf := make([]byte, 0)
+	buf := make([]byte, 0, 8)
 
 	done := false
 	for !done {

@@ -1,12 +1,12 @@
 # leb128
 
-[![GoDoc](https://pkg.go.dev/badge/github.com/jcalabro/leb128?status.svg)](https://pkg.go.dev/github.com/jcalabro/leb128) [![Tests](https://github.com/jcalabro/leb128/actions/workflows/ci.yaml/badge.svg)](https://github.com/jcalabro/leb128/actions/workflows/ci.yaml) [![codecov](https://codecov.io/github/jcalabro/leb128/branch/main/graph/badge.svg?token=ILKTKORT5D)](https://codecov.io/github/jcalabro/leb128)
+[![GoDoc](https://pkg.go.dev/badge/github.com/MichaelMure/leb128?status.svg)](https://pkg.go.dev/github.com/MichaelMure/leb128) [![Tests](https://github.com/MichaelMure/leb128/actions/workflows/ci.yaml/badge.svg)](https://github.com/MichaelMure/leb128/actions/workflows/ci.yaml)
 
 Go implementation of signed/unsigned LEB128. Encodes/decodes 8 byte integers.
 
 ## Usage
 
-Full documentation is available at [gopkg.dev](https://pkg.go.dev/github.com/jcalabro/leb128).
+Full documentation is available at [gopkg.dev](https://pkg.go.dev/github.com/MichaelMure/leb128).
 
 #### Decoding
 
@@ -19,7 +19,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/jcalabro/leb128"
+	"github.com/MichaelMure/leb128"
 )
 
 func unsigned() {
@@ -60,7 +60,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/jcalabro/leb128"
+	"github.com/MichaelMure/leb128"
 )
 
 func unsigned() {
