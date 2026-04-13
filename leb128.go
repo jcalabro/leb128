@@ -19,14 +19,12 @@ var (
 
 // DecodeU32 converts a uleb128 byte stream to a uint32. Be careful
 // to ensure that your data can fit in 4 bytes.
-func DecodeU32(r io.Reader) (uint32, error) {
+func DecodeU32(r io.ByteReader) (uint32, error) {
 	var res uint32 = 0
 	var shift uint = 0
 
-	var buf [1]byte
-
 	for i := 0; ; i++ {
-		_, err := io.ReadFull(r, buf[:])
+		b, err := r.ReadByte()
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -38,7 +36,6 @@ func DecodeU32(r io.Reader) (uint32, error) {
 			return 0, err
 		}
 
-		b := buf[0]
 		res |= uint32(b&0x7F) << shift
 		shift += 7
 
@@ -57,14 +54,12 @@ func DecodeU32(r io.Reader) (uint32, error) {
 
 // DecodeU64 converts a uleb128 byte stream to a uint64. Be careful
 // to ensure that your data can fit in 8 bytes.
-func DecodeU64(r io.Reader) (uint64, error) {
+func DecodeU64(r io.ByteReader) (uint64, error) {
 	var res uint64 = 0
 	var shift uint = 0
 
-	var buf [1]byte
-
 	for i := 0; ; i++ {
-		_, err := io.ReadFull(r, buf[:])
+		b, err := r.ReadByte()
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -76,7 +71,6 @@ func DecodeU64(r io.Reader) (uint64, error) {
 			return 0, err
 		}
 
-		b := buf[0]
 		res |= uint64(b&0x7F) << shift
 		shift += 7
 
@@ -95,15 +89,13 @@ func DecodeU64(r io.Reader) (uint64, error) {
 
 // DecodeS64 converts a sleb128 byte stream to a int64. Be careful
 // to ensure that your data can fit in 8 bytes.
-func DecodeS64(r io.Reader) (int64, error) {
+func DecodeS64(r io.ByteReader) (int64, error) {
 	var res int64 = 0
 	var shift uint = 0
 	var prev byte = 0
 
-	var buf [1]byte
-
 	for i := 0; ; i++ {
-		_, err := io.ReadFull(r, buf[:])
+		b, err := r.ReadByte()
 		if err == io.EOF {
 			if i == 0 {
 				return 0, io.EOF
@@ -115,7 +107,6 @@ func DecodeS64(r io.Reader) (int64, error) {
 			return 0, err
 		}
 
-		b := buf[0]
 		res |= int64(b&0x7F) << shift
 		shift += 7
 

@@ -14,7 +14,7 @@ import (
 
 type errorReader struct{}
 
-func (er *errorReader) Read(_ []byte) (int, error) {
+func (er *errorReader) ReadByte() (byte, error) {
 	return 0, fmt.Errorf("test error")
 }
 
