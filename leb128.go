@@ -31,7 +31,7 @@ func DecodeU64(r io.Reader) (uint64, error) {
 		buf [1]byte
 	)
 
-	for i := 0; i < maxWidth; i++ {
+	for i := range maxWidth {
 		if _, err := io.ReadFull(r, buf[:]); err != nil {
 			if err == io.EOF && i == 0 {
 				return 0, io.EOF
@@ -70,7 +70,7 @@ func DecodeS64(r io.Reader) (int64, error) {
 		shift uint
 	)
 
-	for i := 0; i < maxWidth; i++ {
+	for i := range maxWidth {
 		if _, err := io.ReadFull(r, buf[:]); err != nil {
 			if err == io.EOF && i == 0 {
 				return 0, io.EOF

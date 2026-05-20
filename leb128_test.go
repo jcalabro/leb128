@@ -42,7 +42,7 @@ func (r *zeroNilReader) Read(p []byte) (int, error) {
 
 func TestUnsigned(t *testing.T) {
 	// simple low-range cases
-	for ndx := uint64(0); ndx < 512; ndx++ {
+	for ndx := range uint64(512) {
 		buf := leb128.EncodeU64(ndx)
 		require.NotEmpty(t, buf)
 		if ndx >= 384 { // [384,512)
@@ -149,7 +149,7 @@ func TestUnsigned(t *testing.T) {
 
 func TestSigned(t *testing.T) {
 	// simple low-range positive cases
-	for ndx := int64(0); ndx < 512; ndx++ {
+	for ndx := range int64(512) {
 		buf := leb128.EncodeS64(ndx)
 		require.NotEmpty(t, buf)
 		if ndx >= 384 { // [384,512)
