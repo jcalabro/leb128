@@ -25,12 +25,47 @@ var ErrOverflow = errors.New("leb128: integer overflow (encoding exceeds 64 bits
 // It returns io.EOF if r is empty, io.ErrUnexpectedEOF if the encoding ends
 // mid-integer (continuation bit set on the final byte read), and ErrOverflow
 // if the encoding does not fit in 64 bits.
+//
+// If r implements io.ByteReader, DecodeU64 takes a fast path that avoids
+// allocating per call and dispatches a single interface call per byte.
+// *bytes.Buffer, *bytes.Reader, *bufio.Reader, and *strings.Reader all
+// satisfy this interface.
 func DecodeU64(r io.Reader) (uint64, error) {
+	if br, ok := r.(io.ByteReader); ok {
+		return decodeU64ByteReader(br)
+	}
+	return decodeU64Reader(r)
+}
+
+func decodeU64ByteReader(r io.ByteReader) (uint64, error) {
+	var res uint64
+	for i := range maxWidth {
+		b, err := r.ReadByte()
+		if err != nil {
+			if err == io.EOF && i == 0 {
+				return 0, io.EOF
+			}
+			if err == io.EOF {
+				return 0, io.ErrUnexpectedEOF
+			}
+			return 0, err
+		}
+		if i == maxWidth-1 && b > 1 {
+			return 0, ErrOverflow
+		}
+		res |= uint64(b&0x7f) << (7 * i)
+		if b&0x80 == 0 {
+			return res, nil
+		}
+	}
+	panic("unreachable: byte-10 overflow check guarantees loop exits")
+}
+
+func decodeU64Reader(r io.Reader) (uint64, error) {
 	var (
 		res uint64
 		buf [1]byte
 	)
-
 	for i := range maxWidth {
 		if _, err := io.ReadFull(r, buf[:]); err != nil {
 			if err == io.EOF && i == 0 {
@@ -42,14 +77,9 @@ func DecodeU64(r io.Reader) (uint64, error) {
 			return 0, err
 		}
 		b := buf[0]
-
-		// On the 10th (final) byte, only bit 0 of the payload fits in
-		// uint64; any other bit set, including the continuation bit
-		// (which would require an 11th byte), means overflow.
 		if i == maxWidth-1 && b > 1 {
 			return 0, ErrOverflow
 		}
-
 		res |= uint64(b&0x7f) << (7 * i)
 		if b&0x80 == 0 {
 			return res, nil
@@ -63,13 +93,53 @@ func DecodeU64(r io.Reader) (uint64, error) {
 // It returns io.EOF if r is empty, io.ErrUnexpectedEOF if the encoding ends
 // mid-integer (continuation bit set on the final byte read), and ErrOverflow
 // if the encoding does not fit in 64 bits.
+//
+// If r implements io.ByteReader, DecodeS64 takes a fast path that avoids
+// allocating per call and dispatches a single interface call per byte.
 func DecodeS64(r io.Reader) (int64, error) {
+	if br, ok := r.(io.ByteReader); ok {
+		return decodeS64ByteReader(br)
+	}
+	return decodeS64Reader(r)
+}
+
+func decodeS64ByteReader(r io.ByteReader) (int64, error) {
+	var (
+		res   int64
+		shift uint
+	)
+	for i := range maxWidth {
+		b, err := r.ReadByte()
+		if err != nil {
+			if err == io.EOF && i == 0 {
+				return 0, io.EOF
+			}
+			if err == io.EOF {
+				return 0, io.ErrUnexpectedEOF
+			}
+			return 0, err
+		}
+		if i == maxWidth-1 && b != 0x00 && b != 0x7f {
+			return 0, ErrOverflow
+		}
+		res |= int64(b&0x7f) << shift
+		shift += 7
+		if b&0x80 == 0 {
+			if shift < 64 && b&0x40 != 0 {
+				res |= ^int64(0) << shift
+			}
+			return res, nil
+		}
+	}
+	panic("unreachable: byte-10 overflow check guarantees loop exits")
+}
+
+func decodeS64Reader(r io.Reader) (int64, error) {
 	var (
 		res   int64
 		buf   [1]byte
 		shift uint
 	)
-
 	for i := range maxWidth {
 		if _, err := io.ReadFull(r, buf[:]); err != nil {
 			if err == io.EOF && i == 0 {
@@ -81,23 +151,12 @@ func DecodeS64(r io.Reader) (int64, error) {
 			return 0, err
 		}
 		b := buf[0]
-
-		// On the 10th byte, bit 0 of the payload becomes the int64 sign
-		// bit and bits 1-6 must agree with it (sign extension). The only
-		// payloads satisfying that are 0x00 (positive) and 0x7f
-		// (negative); anything else (including a set continuation bit)
-		// means the encoded value overflows.
 		if i == maxWidth-1 && b != 0x00 && b != 0x7f {
 			return 0, ErrOverflow
 		}
-
 		res |= int64(b&0x7f) << shift
 		shift += 7
-
 		if b&0x80 == 0 {
-			// sign-extend negative values; the shift < 64 guard avoids
-			// relying on Go's well-defined-but-confusing behavior for
-			// shifts that exceed the operand width.
 			if shift < 64 && b&0x40 != 0 {
 				res |= ^int64(0) << shift
 			}
@@ -109,6 +168,11 @@ func DecodeS64(r io.Reader) (int64, error) {
 
 // EncodeU64 converts num to a uleb128-encoded slice of bytes.
 func EncodeU64(num uint64) []byte {
+	// Most values in real workloads fit in one byte; special-case to skip
+	// the loop entirely.
+	if num < 0x80 {
+		return []byte{byte(num)}
+	}
 	buf := make([]byte, 0, maxWidth)
 	for {
 		b := byte(num & 0x7f)
@@ -122,13 +186,17 @@ func EncodeU64(num uint64) []byte {
 
 // EncodeS64 converts num to a sleb128-encoded slice of bytes.
 func EncodeS64(num int64) []byte {
+	// Single-byte fast path: values in [-0x40, 0x40) encode in one byte.
+	if num >= -0x40 && num < 0x40 {
+		return []byte{byte(num) & 0x7f}
+	}
+	// From https://go.dev/ref/spec#Arithmetic_operators: "The shift
+	// operators implement arithmetic shifts if the left operand is a signed
+	// integer and logical shifts if it is an unsigned integer." We rely on
+	// the arithmetic shift to drive num toward 0 (positive) or -1
+	// (negative) as the loop terminator.
 	buf := make([]byte, 0, maxWidth)
 	for {
-		// From https://go.dev/ref/spec#Arithmetic_operators: "The shift
-		// operators implement arithmetic shifts if the left operand is a
-		// signed integer and logical shifts if it is an unsigned
-		// integer." We rely on the arithmetic shift to drive num toward
-		// 0 (positive) or -1 (negative) as the loop terminator.
 		b := byte(num & 0x7f)
 		num >>= 7
 		signBit := b & 0x40
