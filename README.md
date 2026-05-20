@@ -6,7 +6,7 @@ Go implementation of signed/unsigned LEB128. Encodes/decodes 8 byte integers.
 
 ## Usage
 
-Full documentation is available at [gopkg.dev](https://pkg.go.dev/github.com/jcalabro/leb128).
+Full documentation is available at [pkg.go.dev](https://pkg.go.dev/github.com/jcalabro/leb128).
 
 #### Decoding
 
@@ -23,8 +23,9 @@ import (
 )
 
 func unsigned() {
-	// using a buffer of length >10 in either the signed/unsigned case
-	// will return the error leb128.ErrOverflow
+	// Encodings whose value would not fit in 64 bits return leb128.ErrOverflow.
+	// An empty reader returns io.EOF; a truncated encoding (continuation bit
+	// set on the final byte read) returns io.ErrUnexpectedEOF.
 
 	buf := bytes.NewBuffer([]byte{128, 2})
 	num, err := leb128.DecodeU64(buf)
@@ -57,7 +58,6 @@ Convert an `int64` or `uint64` to a `[]byte`:
 package main
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/jcalabro/leb128"

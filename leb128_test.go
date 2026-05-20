@@ -3,6 +3,7 @@ package leb128_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"testing"
 
@@ -15,6 +16,28 @@ type errorReader struct{}
 
 func (er *errorReader) Read(_ []byte) (int, error) {
 	return 0, fmt.Errorf("test error")
+}
+
+// zeroNilReader returns (0, nil) on every other call, simulating a reader
+// that yields no data without signaling EOF (allowed by io.Reader).
+type zeroNilReader struct {
+	data    []byte
+	pos     int
+	stalled bool
+}
+
+func (r *zeroNilReader) Read(p []byte) (int, error) {
+	if r.stalled {
+		r.stalled = false
+		return 0, nil
+	}
+	r.stalled = true
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data[r.pos:])
+	r.pos += n
+	return n, nil
 }
 
 func TestUnsigned(t *testing.T) {
@@ -62,9 +85,16 @@ func TestUnsigned(t *testing.T) {
 	}
 
 	{
-		// empty buffer
-		res, err := leb128.DecodeU64(bytes.NewBuffer([]byte{}))
-		require.NoError(t, err)
+		// empty buffer => io.EOF (lets streaming callers detect end-of-input)
+		res, err := leb128.DecodeU64(bytes.NewBuffer(nil))
+		require.ErrorIs(t, err, io.EOF)
+		require.Zero(t, res)
+	}
+
+	{
+		// truncated encoding (continuation bit set on final byte) => unexpected EOF
+		res, err := leb128.DecodeU64(bytes.NewBuffer([]byte{0x80}))
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 		require.Zero(t, res)
 	}
 
@@ -76,7 +106,15 @@ func TestUnsigned(t *testing.T) {
 	}
 
 	{
-		// ensure that we stop at the correct time
+		// reader that returns (0, nil) between bytes must not corrupt the result
+		input := []byte{0x80, 0x02} // == 256
+		res, err := leb128.DecodeU64(&zeroNilReader{data: input})
+		require.NoError(t, err)
+		require.Equal(t, uint64(256), res)
+	}
+
+	{
+		// ensure that we stop at the correct time (continuation bit clear)
 		input := []byte{0x78, 0x10, 0xf, 0xa, 0xb, 0x90, 0x01, 0, 0xff, 0xff, 0xff}
 		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
 		require.NoError(t, err)
@@ -84,12 +122,28 @@ func TestUnsigned(t *testing.T) {
 	}
 
 	{
-		// restrict to 10 bytes (final bytes would overflow an 8 byte integer)
-		input := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0}
-
+		// 11-byte encoding (continuation bit on byte 10) overflows
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00}
 		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
 		require.ErrorIs(t, err, leb128.ErrOverflow)
-		require.Equal(t, uint64(0), res)
+		require.Zero(t, res)
+	}
+
+	{
+		// strict overflow on byte 10: only payloads 0x00 or 0x01 fit in uint64
+		// 0x02 sets bit 1 of byte 10, which would be uint64 bit 64 => overflow
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x02}
+		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
+		require.ErrorIs(t, err, leb128.ErrOverflow)
+		require.Zero(t, res)
+	}
+
+	{
+		// largest legal 10-byte encoding (math.MaxUint64) round-trips
+		input := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01}
+		res, err := leb128.DecodeU64(bytes.NewBuffer(input))
+		require.NoError(t, err)
+		require.Equal(t, uint64(math.MaxUint64), res)
 	}
 }
 
@@ -113,8 +167,8 @@ func TestSigned(t *testing.T) {
 			require.Len(t, buf, 2)
 			require.Equal(t, byte(ndx), buf[0])
 			require.Equal(t, byte(1), buf[1])
-		} else if ndx >= 64 { // [0,64)
-			// i.e. 64 => [192,1]
+		} else if ndx >= 64 { // [64,128)
+			// i.e. 64 => [192,0]
 			require.Len(t, buf, 2)
 			require.Equal(t, byte(ndx+128), buf[0])
 			require.Equal(t, byte(0), buf[1])
@@ -153,7 +207,7 @@ func TestSigned(t *testing.T) {
 			require.Len(t, buf, 2)
 			require.Equal(t, byte(ndx), buf[0])
 			require.Equal(t, byte(127), buf[1])
-		} else {
+		} else { // [-64,0)
 			require.Len(t, buf, 1)
 			require.Equal(t, byte(ndx+128), buf[0])
 		}
@@ -191,9 +245,26 @@ func TestSigned(t *testing.T) {
 	}
 
 	{
-		// empty buffer
-		res, err := leb128.DecodeS64(bytes.NewBuffer([]byte{}))
+		// -1 encodes to a single byte with all sign bits set
+		buf := leb128.EncodeS64(-1)
+		require.Equal(t, []byte{0x7f}, buf)
+
+		res, err := leb128.DecodeS64(bytes.NewBuffer(buf))
 		require.NoError(t, err)
+		require.Equal(t, int64(-1), res)
+	}
+
+	{
+		// empty buffer => io.EOF
+		res, err := leb128.DecodeS64(bytes.NewBuffer(nil))
+		require.ErrorIs(t, err, io.EOF)
+		require.Zero(t, res)
+	}
+
+	{
+		// truncated encoding (continuation bit set on final byte) => unexpected EOF
+		res, err := leb128.DecodeS64(bytes.NewBuffer([]byte{0x80}))
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 		require.Zero(t, res)
 	}
 
@@ -205,11 +276,45 @@ func TestSigned(t *testing.T) {
 	}
 
 	{
-		// restrict to 10 bytes (final bytes overflow an 8 byte integer)
-		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xff}
+		// reader that returns (0, nil) between bytes must not corrupt the result
+		input := []byte{0x80, 0x7e} // == -256
+		res, err := leb128.DecodeS64(&zeroNilReader{data: input})
+		require.NoError(t, err)
+		require.Equal(t, int64(-256), res)
+	}
 
+	{
+		// stop at the first byte with the continuation bit clear; trailing
+		// bytes belong to the next value in the stream
+		input := []byte{0x40, 0xff, 0xff} // 0x40 alone => -64
+		res, err := leb128.DecodeS64(bytes.NewBuffer(input))
+		require.NoError(t, err)
+		require.Equal(t, int64(-64), res)
+	}
+
+	{
+		// 11-byte encoding (continuation bit on byte 10) overflows
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00}
 		res, err := leb128.DecodeS64(bytes.NewBuffer(input))
 		require.ErrorIs(t, err, leb128.ErrOverflow)
-		require.Equal(t, int64(0), res)
+		require.Zero(t, res)
+	}
+
+	{
+		// strict overflow on byte 10: only 0x00 (positive) and 0x7f (negative)
+		// produce a valid sign-extension; 0x01 sets a bit beyond the int64
+		// sign bit
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01}
+		res, err := leb128.DecodeS64(bytes.NewBuffer(input))
+		require.ErrorIs(t, err, leb128.ErrOverflow)
+		require.Zero(t, res)
+	}
+
+	{
+		// 0x40 on byte 10 (sign bit set without sign-extension) overflows
+		input := []byte{0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x40}
+		res, err := leb128.DecodeS64(bytes.NewBuffer(input))
+		require.ErrorIs(t, err, leb128.ErrOverflow)
+		require.Zero(t, res)
 	}
 }
